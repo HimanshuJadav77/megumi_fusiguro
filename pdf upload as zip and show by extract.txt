@@ -1,0 +1,93 @@
+// This part is assumed to be handled in your control panel
+Future<void> uploadZipFile(File zipFile) async {
+  final storageRef = FirebaseStorage.instance.ref('uploads/').child('your_zip_file.zip');
+
+  await storageRef.putFile(zipFile);
+}
+
+---------------------------------------------------
+Future<File> downloadZipFile(String zipUrl) async {
+  final response = await http.get(Uri.parse(zipUrl));
+  final bytes = response.bodyBytes;
+
+  // Get the temporary directory
+  final tempDir = Directory.systemTemp;
+  final zipFile = File('${tempDir.path}/downloaded_zip.zip');
+
+  // Write the bytes to the file
+  await zipFile.writeAsBytes(bytes);
+
+  return zipFile;
+}
+
+-----------------------------------------------------
+import 'package:archive/archive.dart';
+
+Future<List<File>> extractZip(File zipFile) async {
+  // Read the zip file
+  final bytes = await zipFile.readAsBytes();
+  final archive = ZipDecoder().decodeBytes(bytes);
+
+  // Prepare a list to hold the extracted PDF files
+  List<File> extractedFiles = [];
+
+  // Extract each file
+  for (var file in archive) {
+    if (file.isFile) {
+      final data = file.content as List<int>;
+      final filePath = '${(await getTemporaryDirectory()).path}/${file.name}';
+      final extractedFile = File(filePath);
+
+      // Write the extracted data to a new file
+      await extractedFile.writeAsBytes(data);
+      extractedFiles.add(extractedFile);
+    }
+  }
+
+  return extractedFiles;
+}
+
+-------------------------------------------------------------
+import 'package:flutter/material.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
+
+class PdfViewerPage extends StatelessWidget {
+  final String filePath;
+
+  const PdfViewerPage({Key? key, required this.filePath}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('PDF Viewer')),
+      body: PDFView(
+        filePath: filePath,
+      ),
+    );
+  }
+}
+
+--------------------------------------------------------------------
+Future<void> handleZipAndDisplay(String zipUrl) async {
+  // Step 1: Download the ZIP file
+  File zipFile = await downloadZipFile(zipUrl);
+  
+  // Step 2: Extract the ZIP file
+  List<File> extractedFiles = await extractZip(zipFile);
+
+  // Step 3: Display the first PDF file (or let the user choose)
+  if (extractedFiles.isNotEmpty) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PdfViewerPage(filePath: extractedFiles[0].path),
+      ),
+    );
+  } else {
+    // Handle the case where no PDFs were extracted
+    showCustomSnackBar('No PDF files found in the ZIP.');
+  }
+}
+
+-----------------------------------------------------------------
+
